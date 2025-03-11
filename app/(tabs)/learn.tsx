@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,11 +10,18 @@ import {
   ActivityIndicator,
   Dimensions,
   RefreshControl,
+  Alert,
+  Platform,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { QuestionAnalysisResult } from '../../services/analysis';
+import { learningService, LearningContentFilter } from '../../services/learning';
+import { getLogger } from '../../services/config';
+
+// 获取日志记录器
+const logger = getLogger('LEARN_SCREEN');
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -26,7 +33,7 @@ interface Subject {
   color: string;
 }
 
-// 模拟学科数据
+// 学科数据
 const SUBJECTS: Subject[] = [
   { id: '1', name: '数学', icon: 'calculator-outline', color: '#4A6FFF' },
   { id: '2', name: '语文', icon: 'book-outline', color: '#FF9500' },
@@ -41,97 +48,6 @@ const SUBJECTS: Subject[] = [
 // 难度级别
 type Difficulty = 'all' | 'easy' | 'medium' | 'hard';
 
-// 模拟推荐题目数据
-const RECOMMENDED_QUESTIONS: QuestionAnalysisResult[] = [
-  {
-    questionId: 'q101',
-    questionText: '解方程: 2x + 5 = 15',
-    subject: '数学',
-    difficulty: 'easy',
-    createdAt: '2023-03-10T09:20:00Z',
-    solutionSteps: [],
-    explanation: '',
-    knowledgePoints: [],
-    relatedResources: [],
-  },
-  {
-    questionId: 'q102',
-    questionText: '计算三角形的面积，已知底边长为6cm，高为8cm。',
-    subject: '数学',
-    difficulty: 'easy',
-    createdAt: '2023-03-09T14:30:00Z',
-    solutionSteps: [],
-    explanation: '',
-    knowledgePoints: [],
-    relatedResources: [],
-  },
-  {
-    questionId: 'q103',
-    questionText: '求解方程组: { 2x + y = 7, x - y = 1 }',
-    subject: '数学',
-    difficulty: 'medium',
-    createdAt: '2023-03-08T11:15:00Z',
-    solutionSteps: [],
-    explanation: '',
-    knowledgePoints: [],
-    relatedResources: [],
-  },
-  {
-    questionId: 'q104',
-    questionText: '已知函数f(x) = x² - 4x + 3，求函数的最小值。',
-    subject: '数学',
-    difficulty: 'medium',
-    createdAt: '2023-03-07T16:45:00Z',
-    solutionSteps: [],
-    explanation: '',
-    knowledgePoints: [],
-    relatedResources: [],
-  },
-  {
-    questionId: 'q105',
-    questionText: '证明：对于任意的三角形，三个内角和等于180°。',
-    subject: '数学',
-    difficulty: 'medium',
-    createdAt: '2023-03-06T10:20:00Z',
-    solutionSteps: [],
-    explanation: '',
-    knowledgePoints: [],
-    relatedResources: [],
-  },
-  {
-    questionId: 'q201',
-    questionText: '分析下列句子的成分："春天来了，万物复苏。"',
-    subject: '语文',
-    difficulty: 'easy',
-    createdAt: '2023-03-10T08:30:00Z',
-    solutionSteps: [],
-    explanation: '',
-    knowledgePoints: [],
-    relatedResources: [],
-  },
-  {
-    questionId: 'q202',
-    questionText: '阅读下面的短文，回答问题：\n"夜晚，星星眨着眼睛，月亮挂在天空中..."',
-    subject: '语文',
-    difficulty: 'medium',
-    createdAt: '2023-03-09T13:15:00Z',
-    solutionSteps: [],
-    explanation: '',
-    knowledgePoints: [],
-    relatedResources: [],
-  },
-  {
-    questionId: 'q301',
-    questionText: 'Complete the sentence: Yesterday, I ___ (go) to the park with my friends.',
-    subject: '英语',
-    difficulty: 'easy',
-    createdAt: '2023-03-08T15:40:00Z',
-    solutionSteps: [],
-    explanation: '',
-    knowledgePoints: [],
-    relatedResources: [],
-  },
-];
 
 // 获取难度标签颜色
 const getDifficultyColor = (difficulty: string) => {
@@ -161,56 +77,237 @@ const getDifficultyText = (difficulty: string) => {
   }
 };
 
+// 在LearnScreen组件之前添加QuestionItem组件
+interface QuestionItemProps {
+  item: QuestionAnalysisResult;
+  onPress: (questionId: string) => void;
+  onToggleFavorite: (questionId: string, isFavorite: boolean) => Promise<boolean>;
+}
+
+const QuestionItem: React.FC<QuestionItemProps> = ({ item, onPress, onToggleFavorite }) => {
+  const [isFavorite, setIsFavorite] = useState(false);
+  
+  // 检查初始收藏状态
+  useEffect(() => {
+    const checkFavoriteStatus = async () => {
+      const favorited = await learningService.isFavorite(item.questionId);
+      setIsFavorite(favorited);
+    };
+    
+    checkFavoriteStatus();
+  }, [item.questionId]);
+  
+  // 切换收藏状态
+  const toggleFavorite = async (e: any) => {
+    e.stopPropagation();
+    
+    // 立即更新UI状态
+    const newState = !isFavorite;
+    setIsFavorite(newState);
+    
+    // 调用API更新收藏状态
+    const success = await onToggleFavorite(item.questionId, newState);
+    
+    // 如果失败，恢复UI状态
+    if (!success) {
+      setIsFavorite(!newState);
+    }
+  };
+  
+  return (
+    <TouchableOpacity
+      style={styles.questionCard}
+      onPress={() => onPress(item.questionId)}
+    >
+      <View style={styles.questionCardHeader}>
+        <View style={styles.subjectContainer}>
+          <Text style={styles.subjectText}>{item.subject}</Text>
+        </View>
+        <View style={styles.cardActions}>
+          <TouchableOpacity
+            style={styles.favoriteButton}
+            onPress={toggleFavorite}
+          >
+            <Ionicons 
+              name={isFavorite ? "bookmark" : "bookmark-outline"} 
+              size={22} 
+              color={isFavorite ? "#4A6FFF" : "#6C757D"} 
+            />
+          </TouchableOpacity>
+          <View
+            style={[
+              styles.difficultyTag,
+              { backgroundColor: getDifficultyColor(item.difficulty) }
+            ]}
+          >
+            <Text style={styles.difficultyText}>
+              {getDifficultyText(item.difficulty)}
+            </Text>
+          </View>
+        </View>
+      </View>
+      <Text style={styles.questionText} numberOfLines={3}>
+        {item.questionText}
+      </Text>
+    </TouchableOpacity>
+  );
+};
+
 export default function LearnScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
   const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>('all');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [questions, setQuestions] = useState<QuestionAnalysisResult[]>(RECOMMENDED_QUESTIONS);
-  const [filteredQuestions, setFilteredQuestions] = useState<QuestionAnalysisResult[]>(RECOMMENDED_QUESTIONS);
+  const [questions, setQuestions] = useState<QuestionAnalysisResult[]>([]);
+  const [filteredQuestions, setFilteredQuestions] = useState<QuestionAnalysisResult[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
-  // 过滤题目
+  // 获取学习内容
+  const fetchLearningContent = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // 构建过滤条件
+      const filter: LearningContentFilter = {};
+      
+      if (selectedSubject) {
+        filter.subject = selectedSubject;
+      }
+      
+      if (selectedDifficulty !== 'all') {
+        filter.difficulty = selectedDifficulty;
+      }
+      
+      if (searchQuery.trim()) {
+        filter.searchQuery = searchQuery.trim();
+      }
+      
+      logger.info('Fetching learning content with filter:', filter);
+      
+      // 调用服务获取学习内容
+      const content = await learningService.getLearningContent(filter);
+      
+      setQuestions(content);
+      setFilteredQuestions(content);
+      
+    } catch (err) {
+      logger.error('Error fetching learning content:', err);
+      setError(err instanceof Error ? err.message : '获取学习内容失败');
+      Alert.alert('加载失败', err instanceof Error ? err.message : '获取学习内容失败，请重试');
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedSubject, selectedDifficulty, searchQuery]);
+
+  // 初始加载
   useEffect(() => {
-    let filtered = [...questions];
-    
-    // 按学科过滤
-    if (selectedSubject) {
-      filtered = filtered.filter(q => q.subject === selectedSubject);
-    }
-    
-    // 按难度过滤
-    if (selectedDifficulty !== 'all') {
-      filtered = filtered.filter(q => q.difficulty === selectedDifficulty);
-    }
-    
-    // 按搜索词过滤
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim();
-      filtered = filtered.filter(q => 
-        q.questionText.toLowerCase().includes(query) || 
-        q.subject.toLowerCase().includes(query)
-      );
-    }
-    
-    setFilteredQuestions(filtered);
-  }, [selectedSubject, selectedDifficulty, searchQuery, questions]);
+    fetchLearningContent();
+  }, [fetchLearningContent]);
 
   // 处理刷新
   const handleRefresh = async () => {
     setRefreshing(true);
     
-    // 模拟网络请求
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    try {
+      await fetchLearningContent();
+    } catch (err) {
+      logger.error('Error refreshing content:', err);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // 处理搜索
+  const handleSearch = async () => {
+    if (loading) return;
     
-    // 简单地随机排序模拟新数据
-    setQuestions([...RECOMMENDED_QUESTIONS].sort(() => 0.5 - Math.random()));
-    setRefreshing(false);
+    try {
+      setLoading(true);
+      
+      // 如果有搜索词，直接使用搜索API
+      if (searchQuery.trim()) {
+        const results = await learningService.searchContent(searchQuery.trim());
+        
+        // 应用其他过滤条件
+        let filtered = [...results];
+        
+        if (selectedSubject) {
+          filtered = filtered.filter(q => q.subject === selectedSubject);
+        }
+        
+        if (selectedDifficulty !== 'all') {
+          filtered = filtered.filter(q => q.difficulty === selectedDifficulty);
+        }
+        
+        setQuestions(filtered);
+        setFilteredQuestions(filtered);
+      } else {
+        // 否则获取全部内容
+        await fetchLearningContent();
+      }
+    } catch (err) {
+      logger.error('Error searching content:', err);
+      setError(err instanceof Error ? err.message : '搜索失败');
+    } finally {
+      setLoading(false);
+    }
   };
 
   // 处理题目点击
-  const handleQuestionPress = (questionId: string) => {
-    router.push(`/analysis/${questionId}`);
+  const handleQuestionPress = async (questionId: string) => {
+    try {
+      // 找到对应的题目
+      const question = questions.find(q => q.questionId === questionId);
+      if (question) {
+        // 将题目添加到历史记录
+        await learningService.addToHistory(question);
+      }
+      
+      // 跳转到题目分析页面
+      router.push(`/analysis/${questionId}`);
+    } catch (error) {
+      // 即使添加历史记录失败，也继续跳转
+      logger.error('Error adding to history:', error);
+      router.push(`/analysis/${questionId}`);
+    }
+  };
+
+  // 处理收藏/取消收藏
+  const handleToggleFavorite = async (questionId: string, isFavorite: boolean) => {
+    try {
+      const success = await learningService.toggleFavorite({
+        questionId,
+        isFavorite
+      });
+      
+      if (!success) {
+        Alert.alert(
+          isFavorite ? '收藏失败' : '取消收藏失败',
+          '请稍后重试'
+        );
+      } else if (Platform.OS === 'android') {
+        // 在Android上显示Toast提示
+        // (在实际应用中，应使用ToastAndroid.show)
+        logger.debug(isFavorite ? '已添加到收藏' : '已取消收藏');
+      }
+      
+      return success;
+    } catch (error) {
+      logger.error('Error toggling favorite:', error);
+      Alert.alert('操作失败', '请稍后重试');
+      return false;
+    }
+  };
+
+  // 处理清除过滤器
+  const clearFilters = () => {
+    setSelectedSubject(null);
+    setSelectedDifficulty('all');
+    setSearchQuery('');
+    // 重新获取数据
+    fetchLearningContent();
   };
 
   // 渲染学科项
@@ -236,29 +333,11 @@ export default function LearnScreen() {
 
   // 渲染题目卡片
   const renderQuestionItem = ({ item }: { item: QuestionAnalysisResult }) => (
-    <TouchableOpacity
-      style={styles.questionCard}
-      onPress={() => handleQuestionPress(item.questionId)}
-    >
-      <View style={styles.questionCardHeader}>
-        <View style={styles.subjectContainer}>
-          <Text style={styles.subjectText}>{item.subject}</Text>
-        </View>
-        <View
-          style={[
-            styles.difficultyTag,
-            { backgroundColor: getDifficultyColor(item.difficulty) }
-          ]}
-        >
-          <Text style={styles.difficultyText}>
-            {getDifficultyText(item.difficulty)}
-          </Text>
-        </View>
-      </View>
-      <Text style={styles.questionText} numberOfLines={3}>
-        {item.questionText}
-      </Text>
-    </TouchableOpacity>
+    <QuestionItem 
+      item={item}
+      onPress={handleQuestionPress}
+      onToggleFavorite={handleToggleFavorite}
+    />
   );
 
   return (
@@ -282,11 +361,17 @@ export default function LearnScreen() {
             value={searchQuery}
             onChangeText={setSearchQuery}
             placeholderTextColor="#ADB5BD"
+            onSubmitEditing={handleSearch}
+            returnKeyType="search"
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity
               style={styles.clearButton}
-              onPress={() => setSearchQuery('')}
+              onPress={() => {
+                setSearchQuery('');
+                // 清除搜索后立即刷新
+                fetchLearningContent();
+              }}
             >
               <Ionicons name="close-circle" size={18} color="#ADB5BD" />
             </TouchableOpacity>
@@ -392,23 +477,30 @@ export default function LearnScreen() {
             <Text style={styles.sectionTitle}>
               题目 ({filteredQuestions.length})
             </Text>
-            {selectedSubject || selectedDifficulty !== 'all' || searchQuery ? (
+            {(selectedSubject || selectedDifficulty !== 'all' || searchQuery) && (
               <TouchableOpacity
                 style={styles.clearFiltersButton}
-                onPress={() => {
-                  setSelectedSubject(null);
-                  setSelectedDifficulty('all');
-                  setSearchQuery('');
-                }}
+                onPress={clearFilters}
               >
                 <Text style={styles.clearFiltersText}>清除筛选</Text>
                 <Ionicons name="close-circle" size={16} color="#4A6FFF" />
               </TouchableOpacity>
-            ) : null}
+            )}
           </View>
           
           {loading ? (
             <ActivityIndicator size="large" color="#4A6FFF" style={styles.loadingIndicator} />
+          ) : error ? (
+            <View style={styles.errorContainer}>
+              <Ionicons name="alert-circle-outline" size={36} color="#DC3545" />
+              <Text style={styles.errorText}>{error}</Text>
+              <TouchableOpacity 
+                style={styles.retryButton}
+                onPress={fetchLearningContent}
+              >
+                <Text style={styles.retryButtonText}>重试</Text>
+              </TouchableOpacity>
+            </View>
           ) : filteredQuestions.length > 0 ? (
             <FlatList
               data={filteredQuestions}
@@ -424,11 +516,7 @@ export default function LearnScreen() {
               </Text>
               <TouchableOpacity
                 style={styles.clearFiltersButton}
-                onPress={() => {
-                  setSelectedSubject(null);
-                  setSelectedDifficulty('all');
-                  setSearchQuery('');
-                }}
+                onPress={clearFilters}
               >
                 <Text style={styles.clearFiltersText}>清除筛选</Text>
               </TouchableOpacity>
@@ -571,6 +659,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 12,
   },
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  favoriteButton: {
+    padding: 4,
+    marginRight: 8,
+  },
   subjectContainer: {
     backgroundColor: '#E9ECEF',
     paddingHorizontal: 8,
@@ -609,5 +705,29 @@ const styles = StyleSheet.create({
     color: '#6C757D',
     marginTop: 12,
     marginBottom: 16,
+  },
+  errorContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+  },
+  errorText: {
+    fontSize: 16,
+    fontFamily: 'PingFangSC-Regular',
+    color: '#6C757D',
+    marginTop: 12,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#4A6FFF',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontFamily: 'PingFangSC-Medium',
+    color: '#FFFFFF',
   },
 });
