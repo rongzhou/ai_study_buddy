@@ -72,6 +72,7 @@ export default function TabsLayout() {
         options={{
           title: '个人中心',
           tabBarIcon: ({ color }) => <TabBarIcon name="person-outline" color={color} />,
+          href: '../profile',
         }}
       />
     </Tabs>

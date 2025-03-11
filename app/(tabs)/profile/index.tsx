@@ -7,15 +7,15 @@ import {
   Image,
   TouchableOpacity,
   Alert,
-  Switch,
   ActivityIndicator,
   Platform,
+  Switch,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useAuth } from '../../context/AuthContext';
-import { UserRole } from '../../types/user';
+import { useAuth } from '../../../context/AuthContext';
+import { UserRole } from '../../../types/user';
 
 // 设置选项类型
 interface SettingOption {
@@ -99,7 +99,7 @@ export default function ProfileScreen() {
 
   // 处理编辑个人资料
   const handleEditProfile = () => {
-    Alert.alert('功能提示', '编辑个人资料功能开发中，敬请期待！');
+    router.push('./edit');
   };
 
   // 处理退出登录
@@ -137,7 +137,7 @@ export default function ProfileScreen() {
         if (setting.type === 'action' && setting.action) {
           setting.action();
         } else if (setting.type === 'link' && setting.linkTo) {
-          router.push(setting.linkTo);
+          router.push(setting.linkTo as any);
         }
       }}
       disabled={setting.type === 'toggle'}
@@ -183,7 +183,7 @@ export default function ProfileScreen() {
           <View style={styles.profileHeader}>
             <View style={styles.avatarContainer}>
               <Image
-                source={user?.avatarUrl ? { uri: user.avatarUrl } : require('../../assets/images/default-avatar.png')}
+                source={user?.avatarUrl ? { uri: user.avatarUrl } : require('../../../assets/images/default-avatar.png')}
                 style={styles.avatar}
               />
               <TouchableOpacity
