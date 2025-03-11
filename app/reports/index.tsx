@@ -7,115 +7,23 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Dimensions,
+  RefreshControl,
+  Alert,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { router } from 'expo-router';
+import { 
+  analyticsService, 
+  LearningReport 
+} from '../../services/analytics';
+import { getLogger } from '../../services/config';
+
+// 获取日志记录器
+const logger = getLogger('REPORTS_SCREEN');
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
-
-// 定义学习数据类型
-interface LearningData {
-  totalQuestions: number;
-  correctQuestions: number;
-  wrongQuestions: number;
-  accuracy: number;
-  weeklyData: {
-    date: string;
-    questions: number;
-    correct: number;
-  }[];
-  subjectData: {
-    subject: string;
-    questions: number;
-    correct: number;
-    accuracy: number;
-  }[];
-  difficultyData: {
-    difficulty: string;
-    questions: number;
-    correct: number;
-    accuracy: number;
-  }[];
-  recentMistakes: {
-    id: string;
-    subject: string;
-    questionText: string;
-    difficulty: string;
-    date: string;
-  }[];
-  strengths: string[];
-  weaknesses: string[];
-  recommendations: string[];
-}
-
-// 模拟学习数据
-const mockLearningData: LearningData = {
-  totalQuestions: 56,
-  correctQuestions: 42,
-  wrongQuestions: 14,
-  accuracy: 75,
-  weeklyData: [
-    { date: '周一', questions: 8, correct: 6 },
-    { date: '周二', questions: 12, correct: 9 },
-    { date: '周三', questions: 5, correct: 4 },
-    { date: '周四', questions: 10, correct: 7 },
-    { date: '周五', questions: 15, correct: 11 },
-    { date: '周六', questions: 4, correct: 3 },
-    { date: '周日', questions: 2, correct: 2 },
-  ],
-  subjectData: [
-    { subject: '数学', questions: 25, correct: 18, accuracy: 72 },
-    { subject: '语文', questions: 15, correct: 12, accuracy: 80 },
-    { subject: '英语', questions: 10, correct: 8, accuracy: 80 },
-    { subject: '物理', questions: 6, correct: 4, accuracy: 66.7 },
-  ],
-  difficultyData: [
-    { difficulty: '简单', questions: 20, correct: 18, accuracy: 90 },
-    { difficulty: '中等', questions: 30, correct: 21, accuracy: 70 },
-    { difficulty: '困难', questions: 6, correct: 3, accuracy: 50 },
-  ],
-  recentMistakes: [
-    {
-      id: 'm1',
-      subject: '数学',
-      questionText: '求解方程: 2x² - 5x - 3 = 0',
-      difficulty: 'medium',
-      date: '2023-03-08',
-    },
-    {
-      id: 'm2',
-      subject: '物理',
-      questionText: '一个物体从10米高处自由落下，计算它落地时的速度。',
-      difficulty: 'medium',
-      date: '2023-03-07',
-    },
-    {
-      id: 'm3',
-      subject: '数学',
-      questionText: '计算积分: ∫(2x + 3)dx',
-      difficulty: 'hard',
-      date: '2023-03-05',
-    },
-  ],
-  strengths: [
-    '英语词汇掌握良好',
-    '数学计算题准确率高',
-    '语文阅读理解能力强',
-  ],
-  weaknesses: [
-    '数学代数方程解题有困难',
-    '物理力学概念理解不够深入',
-    '数学积分计算需要加强',
-  ],
-  recommendations: [
-    '加强数学代数方程的练习，特别是二次方程',
-    '复习物理力学基本概念和公式',
-    '针对积分计算，建议从基础题开始，逐步提高难度',
-    '继续保持英语词汇的学习节奏',
-  ],
-};
 
 // 获取难度颜色
 const getDifficultyColor = (difficulty: string) => {
@@ -184,17 +92,28 @@ const BarChart = ({
 export default function ReportsScreen() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [learningData, setLearningData] = useState<LearningData | null>(null);
+  const [learningData, setLearningData] = useState<LearningReport | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'subject' | 'recommend'>('overview');
+  const [refreshing, setRefreshing] = useState(false);
 
-  // 模拟加载数据
+  // 加载数据
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
-      // 模拟网络请求延迟
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      setLearningData(mockLearningData);
-      setLoading(false);
+      try {
+        // 使用analyticsService获取学习报告
+        const report = await analyticsService.getLearningReport();
+        setLearningData(report);
+        logger.info('Learning report loaded successfully');
+      } catch (error) {
+        logger.error('Error loading learning report:', error);
+        Alert.alert(
+          '加载失败', 
+          error instanceof Error ? error.message : '获取报告数据失败，请重试'
+        );
+      } finally {
+        setLoading(false);
+      }
     };
 
     loadData();
@@ -203,6 +122,25 @@ export default function ReportsScreen() {
   // 处理错题点击
   const handleMistakePress = (id: string) => {
     router.push(`/analysis/${id}`);
+  };
+
+  // 处理刷新
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      // 强制刷新数据
+      const report = await analyticsService.getLearningReport(true);
+      setLearningData(report);
+      logger.info('Learning report refreshed successfully');
+    } catch (error) {
+      logger.error('Error refreshing learning report:', error);
+      Alert.alert(
+        '刷新失败', 
+        error instanceof Error ? error.message : '刷新报告数据失败，请重试'
+      );
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   if (loading) {
@@ -237,6 +175,9 @@ export default function ReportsScreen() {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={['#4A6FFF']} />
+        }
       >
         {/* 概览卡片 */}
         <View style={styles.overviewCard}>
