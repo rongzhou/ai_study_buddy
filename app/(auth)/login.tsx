@@ -13,13 +13,18 @@ import {
   Image,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
+import { getLogger } from '../../services/config';
+
+// 获取日志记录器
+const logger = getLogger('LOGIN');
 
 export default function LoginScreen() {
+  const router = useRouter();
   // 从认证上下文获取状态和方法
-  const { login, isLoading, error, clearError } = useAuth();
+  const { login, isAuthenticating, error, clearError } = useAuth();
 
   // 表单状态
   const [username, setUsername] = useState('');
@@ -34,14 +39,19 @@ export default function LoginScreen() {
 
   // 处理登录
   const handleLogin = async () => {
-    if (isFormValid) {
-      await login({ username, password });
-    }
+    if (!isFormValid || isAuthenticating) return;
+    
+    logger.info('Login attempt for:', username);
+    
+    // 调用登录方法，不处理导航
+    await login({ username, password });
+    // 导航由 AuthenticationGuard 组件处理
   };
 
   // 显示错误提示
   useEffect(() => {
     if (error) {
+      logger.warn('Login error:', error);
       Alert.alert('登录失败', error, [
         { text: '确定', onPress: clearError },
       ]);
@@ -105,11 +115,11 @@ export default function LoginScreen() {
           </View>
 
           <TouchableOpacity
-            style={[styles.loginButton, !isFormValid && styles.loginButtonDisabled]}
+            style={[styles.loginButton, (!isFormValid || isAuthenticating) && styles.loginButtonDisabled]}
             onPress={handleLogin}
-            disabled={!isFormValid || isLoading}
+            disabled={!isFormValid || isAuthenticating}
           >
-            {isLoading ? (
+            {isAuthenticating ? (
               <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
               <Text style={styles.loginButtonText}>登录</Text>

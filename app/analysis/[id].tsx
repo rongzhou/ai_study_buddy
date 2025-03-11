@@ -18,96 +18,6 @@ import { analysisService, QuestionAnalysisResult, SolutionStep, KnowledgePoint, 
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
-// 模拟题目分析结果（实际应从API获取）
-const mockAnalysisResult: QuestionAnalysisResult = {
-  questionId: 'q123',
-  questionText: '求解方程: x² - 5x + 6 = 0',
-  questionLatex: 'x^2 - 5x + 6 = 0',
-  subject: '数学',
-  difficulty: 'medium',
-  solutionSteps: [
-    {
-      id: 's1',
-      stepNumber: 1,
-      content: '使用因式分解法，我们需要找到两个数，它们的和为-5，积为6',
-      latex: '',
-    },
-    {
-      id: 's2',
-      stepNumber: 2,
-      content: '这两个数是-2和-3，因为(-2) + (-3) = -5，且(-2) × (-3) = 6',
-      latex: '',
-    },
-    {
-      id: 's3',
-      stepNumber: 3,
-      content: '因此，方程可以重写为: (x - 2)(x - 3) = 0',
-      latex: '(x - 2)(x - 3) = 0',
-    },
-    {
-      id: 's4',
-      stepNumber: 4,
-      content: '当两个因子的乘积为0时，至少有一个因子必须为0',
-      latex: '',
-    },
-    {
-      id: 's5',
-      stepNumber: 5,
-      content: 'x - 2 = 0 或 x - 3 = 0',
-      latex: 'x - 2 = 0 \\quad \\text{或} \\quad x - 3 = 0',
-    },
-    {
-      id: 's6',
-      stepNumber: 6,
-      content: 'x = 2 或 x = 3',
-      latex: 'x = 2 \\quad \\text{或} \\quad x = 3',
-    },
-  ],
-  explanation: '这是一个可以使用因式分解法解决的二次方程。通过找到两个和为-5，积为6的数(-2和-3)，我们可以将方程重写为(x-2)(x-3)=0。然后利用零乘性质，当两个因子的乘积为0时，至少有一个因子等于0，从而得到x=2或x=3。',
-  knowledgePoints: [
-    {
-      id: 'kp1',
-      name: '二次方程',
-      description: '含有未知数的二次项的方程',
-      difficulty: 'medium',
-    },
-    {
-      id: 'kp2',
-      name: '因式分解',
-      description: '将代数式分解为若干因式的乘积',
-      difficulty: 'medium',
-    },
-    {
-      id: 'kp3',
-      name: '零乘性质',
-      description: '如果a×b=0，那么a=0或b=0',
-      difficulty: 'easy',
-    },
-  ],
-  relatedResources: [
-    {
-      id: 'r1',
-      title: '因式分解法解二次方程',
-      type: 'video',
-      url: 'https://example.com/video1',
-      thumbnail: 'https://example.com/thumbnail1.jpg',
-    },
-    {
-      id: 'r2',
-      title: '二次方程综合练习',
-      type: 'exercise',
-      url: 'https://example.com/exercise1',
-    },
-    {
-      id: 'r3',
-      title: '二次方程的应用',
-      type: 'article',
-      url: 'https://example.com/article1',
-    },
-  ],
-  createdAt: '2023-03-09T10:30:00Z',
-};
-
 // 获取难度标签颜色
 const getDifficultyColor = (difficulty: string) => {
   switch (difficulty) {
@@ -221,23 +131,19 @@ export default function AnalysisDetailScreen() {
         setLoading(true);
         setError(null);
         
-        // 实际应用中，应该使用任务ID获取真实数据
-        // const result = await analysisService.pollAnalysisResult(
-        //   taskId,
-        //   15,
-        //   2000,
-        //   (status, currentProgress) => {
-        //     if (currentProgress) {
-        //       setProgress(currentProgress);
-        //     }
-        //   }
-        // );
+        // 使用分析服务获取结果
+        const result = await analysisService.pollAnalysisResult(
+          taskId,
+          15,
+          2000,
+          (status, currentProgress) => {
+            if (currentProgress) {
+              setProgress(currentProgress);
+            }
+          }
+        );
         
-        // 模拟加载
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        
-        // 使用模拟数据
-        setAnalysisResult(mockAnalysisResult);
+        setAnalysisResult(result);
       } catch (err) {
         console.error('加载分析结果错误:', err);
         setError(err instanceof Error ? err.message : '加载分析结果失败');
@@ -262,9 +168,37 @@ export default function AnalysisDetailScreen() {
   };
 
   // 处理练习更多题目
-  const handleMoreExercises = () => {
-    // 跳转到相似题目页面
-    router.push('/(tabs)/learn');
+  const handleMoreExercises = async () => {
+    try {
+      if (analysisResult) {
+        // 获取相似题目
+        const similarQuestions = await analysisService.getSimilarQuestions(analysisResult.questionId);
+        console.log('获取到相似题目:', similarQuestions.length);
+      }
+      // 跳转到相似题目页面
+      router.push('/(tabs)/learn');
+    } catch (error) {
+      console.error('获取相似题目错误:', error);
+      router.push('/(tabs)/learn');
+    }
+  };
+
+  // 提交反馈
+  const handleSubmitFeedback = async (isHelpful: boolean) => {
+    if (!analysisResult) return;
+    
+    try {
+      const success = await analysisService.submitFeedback(analysisResult.questionId, {
+        isHelpful,
+        rating: isHelpful ? 5 : 2
+      });
+      
+      if (success) {
+        Alert.alert('感谢', '感谢您的反馈，我们将继续改进解析质量！');
+      }
+    } catch (error) {
+      console.error('提交反馈错误:', error);
+    }
   };
 
   return (
@@ -415,6 +349,26 @@ export default function AnalysisDetailScreen() {
                 <Text style={styles.explanationTitle}>解题思路</Text>
                 <Text style={styles.explanationText}>{analysisResult.explanation}</Text>
               </View>
+              
+              <View style={styles.feedbackContainer}>
+                <Text style={styles.feedbackTitle}>此解析对您有帮助吗？</Text>
+                <View style={styles.feedbackButtons}>
+                  <TouchableOpacity
+                    style={styles.feedbackButton}
+                    onPress={() => handleSubmitFeedback(true)}
+                  >
+                    <Ionicons name="thumbs-up-outline" size={20} color="#4A6FFF" />
+                    <Text style={styles.feedbackButtonText}>有帮助</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.feedbackButton}
+                    onPress={() => handleSubmitFeedback(false)}
+                  >
+                    <Ionicons name="thumbs-down-outline" size={20} color="#6C757D" />
+                    <Text style={styles.feedbackButtonText}>需改进</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
           )}
 
@@ -475,6 +429,7 @@ export default function AnalysisDetailScreen() {
     </View>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {
@@ -788,5 +743,39 @@ const styles = StyleSheet.create({
     fontFamily: 'PingFangSC-Medium',
     color: '#FFFFFF',
     marginRight: 8,
+  },
+  feedbackContainer: {
+    marginTop: 24,
+    padding: 16,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 8,
+  },
+  feedbackTitle: {
+    fontSize: 16,
+    fontFamily: 'PingFangSC-Medium',
+    color: '#212529',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  feedbackButtons: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 16,
+  },
+  feedbackButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    paddingHorizontal: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
+  },
+  feedbackButtonText: {
+    fontSize: 14,
+    fontFamily: 'PingFangSC-Regular',
+    color: '#212529',
+    marginLeft: 8,
   },
 });

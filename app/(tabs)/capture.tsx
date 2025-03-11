@@ -18,39 +18,9 @@ import * as FileSystem from 'expo-file-system';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import { imageService } from '../../services/image';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
-
-// 定义图像服务类型
-interface ImageService {
-  uploadImage: (
-    imageUri: string,
-    onProgress?: (progress: number) => void
-  ) => Promise<{ taskId: string }>;
-}
-
-// 模拟图像上传服务
-const mockImageService: ImageService = {
-  uploadImage: async (imageUri, onProgress) => {
-    // 模拟上传进度
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 10;
-      if (onProgress) {
-        onProgress(progress);
-      }
-      if (progress >= 100) {
-        clearInterval(interval);
-      }
-    }, 300);
-
-    // 模拟网络延迟
-    await new Promise((resolve) => setTimeout(resolve, 3000));
-    
-    // 返回模拟的任务ID
-    return { taskId: 'task_' + Date.now() };
-  },
-};
 
 export default function CaptureScreen() {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
@@ -147,16 +117,8 @@ export default function CaptureScreen() {
     setUploadProgress(0);
     
     try {
-      // 获取图像信息
-      const fileInfo = await FileSystem.getInfoAsync(capturedImage);
-      
-      // 检查文件是否存在
-      if (!fileInfo.exists) {
-        throw new Error('文件不存在');
-      }
-      
-      // 上传图像
-      const response = await mockImageService.uploadImage(
+      // 上传图像，使用我们的 imageService
+      const response = await imageService.uploadImage(
         capturedImage,
         (progress) => setUploadProgress(progress)
       );
@@ -166,7 +128,7 @@ export default function CaptureScreen() {
       router.push(`/analysis/${response.taskId}`);
     } catch (error) {
       console.error('图像处理错误:', error);
-      Alert.alert('错误', '图像处理失败，请重试。');
+      Alert.alert('错误', error instanceof Error ? error.message : '图像处理失败，请重试。');
       setIsProcessing(false);
     }
   };

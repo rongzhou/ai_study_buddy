@@ -1,29 +1,12 @@
 import { Stack } from 'expo-router';
-import { useAuth } from '../../context/AuthContext';
-import { useEffect, useState } from 'react';
-import { router } from 'expo-router';
+import { getLogger } from '../../services/config';
+
+// 获取日志记录器
+const logger = getLogger('REPORTS_LAYOUT');
 
 export default function ReportsLayout() {
-  const { isAuthenticated, isLoading } = useAuth();
-  const [isNavigationReady, setIsNavigationReady] = useState(false);
-
-  // 在组件挂载后标记导航已准备好
-  useEffect(() => {
-    setIsNavigationReady(true);
-  }, []);
-
-  // 只有在组件挂载后且用户未登录时才进行重定向
-  useEffect(() => {
-    if (isNavigationReady && !isLoading && !isAuthenticated) {
-      router.replace('/(auth)/login');
-    }
-  }, [isAuthenticated, isLoading, isNavigationReady]);
-
-  // 如果认证状态正在加载，先不渲染内容
-  if (isLoading) {
-    return null;
-  }
-
+  logger.debug('Rendering reports layout');
+  
   return (
     <Stack
       screenOptions={{

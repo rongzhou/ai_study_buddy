@@ -16,10 +16,14 @@ import { Link, Stack } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { UserRole } from '../../types/user';
+import { getLogger } from '../../services/config';
+
+// 获取日志记录器
+const logger = getLogger('REGISTER');
 
 export default function RegisterScreen() {
   // 从认证上下文获取状态和方法
-  const { register, isLoading, error, clearError } = useAuth();
+  const { register, isAuthenticating, error, clearError } = useAuth();
 
   // 表单状态
   const [username, setUsername] = useState('');
@@ -47,28 +51,32 @@ export default function RegisterScreen() {
 
   // 处理注册
   const handleRegister = async () => {
-    if (isFormValid) {
-      const userData = {
-        username,
-        password,
-        confirmPassword,
-        displayName,
-        email: email.trim() || undefined,
-        role,
-        grade: grade.trim() || undefined,
-        school: school.trim() || undefined,
-        preferences: {
-          favoriteSubjects: []
-        }
-      };
+    if (!isFormValid || isAuthenticating) return;
+    
+    logger.info('Registration attempt for:', username);
+    
+    const userData = {
+      username,
+      password,
+      confirmPassword,
+      displayName,
+      email: email.trim() || undefined,
+      role,
+      grade: grade.trim() || undefined,
+      school: school.trim() || undefined,
+      preferences: {
+        favoriteSubjects: []
+      }
+    };
 
-      await register(userData);
-    }
+    // 调用注册方法，不处理导航，导航由AuthenticationGuard处理
+    await register(userData);
   };
 
   // 显示错误提示
   useEffect(() => {
     if (error) {
+      logger.warn('Registration error:', error);
       Alert.alert('注册失败', error, [
         { text: '确定', onPress: clearError },
       ]);
@@ -289,11 +297,11 @@ export default function RegisterScreen() {
 
           {/* 注册按钮 */}
           <TouchableOpacity
-            style={[styles.registerButton, !isFormValid && styles.registerButtonDisabled]}
+            style={[styles.registerButton, (!isFormValid || isAuthenticating) && styles.registerButtonDisabled]}
             onPress={handleRegister}
-            disabled={!isFormValid || isLoading}
+            disabled={!isFormValid || isAuthenticating}
           >
-            {isLoading ? (
+            {isAuthenticating ? (
               <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
               <Text style={styles.registerButtonText}>创建账号</Text>
